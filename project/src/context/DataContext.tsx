@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { db } from '../config/firebase';
+import { collection, doc, setDoc, updateDoc, deleteDoc, getDocs, query, onSnapshot } from 'firebase/firestore';
 import { 
   Transaction, 
   Account, 
@@ -312,110 +314,243 @@ const generateMockData = () => {
 };
 
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [data, setData] = useState(() => {
-    const storedData = localStorage.getItem('accountingData');
-    return storedData ? JSON.parse(storedData) : generateMockData();
-  });
+  const [data, setData] = useState<DataState>(generateMockData());
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Initialize data from Firestore
   useEffect(() => {
-    localStorage.setItem('accountingData', JSON.stringify(data));
-  }, [data]);
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        
+        // Create collections references
+        const collectionsToFetch = [
+          'transactions', 'accounts', 'categories', 'suppliers', 
+          'clients', 'invoices', 'bills', 'budgets'
+        ];
+        
+        const fetchedData: Partial<DataState> = {};
+        
+        // Fetch all collections
+        for (const collectionName of collectionsToFetch) {
+          const querySnapshot = await getDocs(collection(db, collectionName));
+          const items: any[] = [];
+          querySnapshot.forEach((doc) => {
+            items.push({ id: doc.id, ...doc.data() });
+          });
+          fetchedData[collectionName as keyof DataState] = items as any;
+        }
+        
+        // Fetch company settings
+        const settingsSnapshot = await getDocs(collection(db, 'settings'));
+        let companySettings = data.companySettings; // Default
+        
+        settingsSnapshot.forEach((doc) => {
+          if (doc.id === 'company') {
+            companySettings = doc.data() as CompanySettings;
+          }
+        });
+        
+        fetchedData.companySettings = companySettings;
+        
+        // If we have data in Firestore, use it
+        if (Object.keys(fetchedData).length > 0) {
+          setData(prevData => ({
+            ...prevData,
+            ...fetchedData as DataState
+          }));
+        } 
+        // If no data in Firestore, initialize with mock data
+        else {
+          const mockData = generateMockData();
+          
+          // Initialize Firestore with mock data
+          for (const collectionName of collectionsToFetch) {
+            const collectionRef = collection(db, collectionName);
+            const items = mockData[collectionName as keyof DataState] as any[];
+            
+            for (const item of items) {
+              await setDoc(doc(collectionRef, item.id), item);
+            }
+          }
+          
+          // Initialize company settings
+          await setDoc(doc(collection(db, 'settings'), 'company'), mockData.companySettings);
+          
+          setData(mockData);
+        }
+      } catch (err) {
+        console.error('Error fetching data from Firestore:', err);
+        setError('Error loading data. Using local data instead.');
+        
+        // Fallback to mock data if Firestore fails
+        const mockData = generateMockData();
+        setData(mockData);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, []);
 
   // Transactions
-  const addTransaction = (transaction: Omit<Transaction, 'id' | 'createdAt'>) => {
-    const newTransaction = {
-      ...transaction,
-      id: uuidv4(),
-      createdAt: new Date().toISOString()
-    };
-    setData((prev: {
-      transactions: Transaction[];
-      accounts: Account[];
-      categories: Category[];
-      suppliers: Supplier[];
-      clients: Client[];
-      invoices: Invoice[];
-      bills: Bill[];
-      budgets: Budget[];
-      companySettings: CompanySettings;
-    }) => ({
-      ...prev,
-      transactions: [...prev.transactions, newTransaction]
-    }));
+  const addTransaction = async (transaction: Omit<Transaction, 'id' | 'createdAt'>) => {
+    try {
+      const newTransaction = {
+        ...transaction,
+        id: uuidv4(),
+        createdAt: new Date().toISOString()
+      };
+      
+      // Add to Firestore
+      const transactionsRef = collection(db, 'transactions');
+      await setDoc(doc(transactionsRef, newTransaction.id), newTransaction);
+      
+      // Update local state
+      setData((prev: {
+        transactions: Transaction[];
+        accounts: Account[];
+        categories: Category[];
+        suppliers: Supplier[];
+        clients: Client[];
+        invoices: Invoice[];
+        bills: Bill[];
+        budgets: Budget[];
+        companySettings: CompanySettings;
+      }) => ({
+        ...prev,
+        transactions: [...prev.transactions, newTransaction]
+      }));
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+    }
   };
 
-  const updateTransaction = (id: string, transaction: Partial<Transaction>) => {
-    setData((prev: {
-      transactions: Transaction[];
-      accounts: Account[];
-      categories: Category[];
-      suppliers: Supplier[];
-      clients: Client[];
-      invoices: Invoice[];
-      bills: Bill[];
-      budgets: Budget[];
-      companySettings: CompanySettings;
-    }) => ({
-      ...prev,
-      transactions: prev.transactions.map((t: Transaction) => 
-        t.id === id ? { ...t, ...transaction, updatedAt: new Date().toISOString() } : t
-      )
-    }));
+  const updateTransaction = async (id: string, transaction: Partial<Transaction>) => {
+    try {
+      const updatedTransaction = {
+        ...transaction,
+        updatedAt: new Date().toISOString()
+      };
+      
+      // Update in Firestore
+      const transactionRef = doc(db, 'transactions', id);
+      await updateDoc(transactionRef, updatedTransaction);
+      
+      // Update local state
+      setData((prev: {
+        transactions: Transaction[];
+        accounts: Account[];
+        categories: Category[];
+        suppliers: Supplier[];
+        clients: Client[];
+        invoices: Invoice[];
+        bills: Bill[];
+        budgets: Budget[];
+        companySettings: CompanySettings;
+      }) => ({
+        ...prev,
+        transactions: prev.transactions.map((t: Transaction) => 
+          t.id === id ? { ...t, ...transaction, updatedAt: new Date().toISOString() } : t
+        )
+      }));
+    } catch (error) {
+      console.error('Error updating transaction:', error);
+    }
   };
 
-  const deleteTransaction = (id: string) => {
-    setData((prev: {
-      transactions: Transaction[];
-      accounts: Account[];
-      categories: Category[];
-      suppliers: Supplier[];
-      clients: Client[];
-      invoices: Invoice[];
-      bills: Bill[];
-      budgets: Budget[];
-      companySettings: CompanySettings;
-    }) => ({
-      ...prev,
-      transactions: prev.transactions.filter((t: Transaction) => t.id !== id)
-    }));
+  const deleteTransaction = async (id: string) => {
+    try {
+      // Delete from Firestore
+      const transactionRef = doc(db, 'transactions', id);
+      await deleteDoc(transactionRef);
+      
+      // Update local state
+      setData((prev: {
+        transactions: Transaction[];
+        accounts: Account[];
+        categories: Category[];
+        suppliers: Supplier[];
+        clients: Client[];
+        invoices: Invoice[];
+        bills: Bill[];
+        budgets: Budget[];
+        companySettings: CompanySettings;
+      }) => ({
+        ...prev,
+        transactions: prev.transactions.filter((t: Transaction) => t.id !== id)
+      }));
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+    }
   };
 
   // Accounts
-  const addAccount = (account: Omit<Account, 'id'>) => {
-    const newAccount = {
-      ...account,
-      id: uuidv4()
-    };
-    setData((prev: {
-      transactions: Transaction[];
-      accounts: Account[];
-      categories: Category[];
-      suppliers: Supplier[];
-      clients: Client[];
-      invoices: Invoice[];
-      bills: Bill[];
-      budgets: Budget[];
-      companySettings: CompanySettings;
-    }) => ({
-      ...prev,
-      accounts: [...prev.accounts, newAccount]
-    }));
+  const addAccount = async (account: Omit<Account, 'id'>) => {
+    try {
+      const newAccount = {
+        ...account,
+        id: uuidv4()
+      };
+      
+      // Add to Firestore
+      const accountsRef = collection(db, 'accounts');
+      await setDoc(doc(accountsRef, newAccount.id), newAccount);
+      
+      // Update local state
+      setData((prev: {
+        transactions: Transaction[];
+        accounts: Account[];
+        categories: Category[];
+        suppliers: Supplier[];
+        clients: Client[];
+        invoices: Invoice[];
+        bills: Bill[];
+        budgets: Budget[];
+        companySettings: CompanySettings;
+      }) => ({
+        ...prev,
+        accounts: [...prev.accounts, newAccount]
+      }));
+    } catch (error) {
+      console.error('Error adding account:', error);
+    }
   };
 
-  const updateAccount = (id: string, account: Partial<Account>) => {
-    setData((prev: DataState) => ({
-      ...prev,
-      accounts: prev.accounts.map((a: Account) => 
-        a.id === id ? { ...a, ...account } : a
-      )
-    }));
+  const updateAccount = async (id: string, account: Partial<Account>) => {
+    try {
+      // Update in Firestore
+      const accountRef = doc(db, 'accounts', id);
+      await updateDoc(accountRef, account);
+      
+      // Update local state
+      setData((prev: DataState) => ({
+        ...prev,
+        accounts: prev.accounts.map((a: Account) => 
+          a.id === id ? { ...a, ...account } : a
+        )
+      }));
+    } catch (error) {
+      console.error('Error updating account:', error);
+    }
   };
 
-  const deleteAccount = (id: string) => {
-    setData((prev: DataState) => ({
-      ...prev,
-      accounts: prev.accounts.filter((a: Account) => a.id !== id)
-    }));
+  const deleteAccount = async (id: string) => {
+    try {
+      // Delete from Firestore
+      const accountRef = doc(db, 'accounts', id);
+      await deleteDoc(accountRef);
+      
+      // Update local state
+      setData((prev: DataState) => ({
+        ...prev,
+        accounts: prev.accounts.filter((a: Account) => a.id !== id)
+      }));
+    } catch (error) {
+      console.error('Error deleting account:', error);
+    }
   };
 
   // Categories
@@ -750,21 +885,30 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Company Settings
-  const updateCompanySettings = (settings: Partial<CompanySettings>) => {
-    setData((prev: {
-      transactions: Transaction[];
-      accounts: Account[];
-      categories: Category[];
-      suppliers: Supplier[];
-      clients: Client[];
-      invoices: Invoice[];
-      bills: Bill[];
-      budgets: Budget[];
-      companySettings: CompanySettings;
-    }) => ({
-      ...prev,
-      companySettings: { ...prev.companySettings, ...settings }
-    }));
+  const updateCompanySettings = async (settings: Partial<CompanySettings>) => {
+    try {
+      // Update in Firestore
+      const settingsRef = doc(db, 'settings', 'company');
+      await updateDoc(settingsRef, settings);
+      
+      // Update local state
+      setData((prev: {
+        transactions: Transaction[];
+        accounts: Account[];
+        categories: Category[];
+        suppliers: Supplier[];
+        clients: Client[];
+        invoices: Invoice[];
+        bills: Bill[];
+        budgets: Budget[];
+        companySettings: CompanySettings;
+      }) => ({
+        ...prev,
+        companySettings: { ...prev.companySettings, ...settings }
+      }));
+    } catch (error) {
+      console.error('Error updating company settings:', error);
+    }
   };
 
   return (
