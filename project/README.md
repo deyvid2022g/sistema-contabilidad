@@ -1,4 +1,28 @@
-# Sistema de Contabilidad
+# Sistema Contable
+
+## Configuración de la Base de Datos MySQL
+
+1. Instala MySQL Server en tu sistema si aún no lo tienes instalado.
+2. Crea una base de datos para el proyecto:
+   ```sql
+   CREATE DATABASE sistema_contable;
+   ```
+3. Ejecuta el script de esquema de la base de datos ubicado en `src/config/schema.sql`
+
+## Configuración del Proyecto
+
+1. Instala las dependencias necesarias:
+   ```bash
+   npm install mysql2 uuid
+   ```
+
+2. Crea un archivo `.env` en la raíz del proyecto basado en `.env.example` y configura las variables de entorno:
+   ```env
+   VITE_MYSQL_HOST=localhost
+   VITE_MYSQL_USER=tu_usuario
+   VITE_MYSQL_PASSWORD=tu_contraseña
+   VITE_MYSQL_DATABASE=sistema_contable
+   ```
 
 ## Descripción
 

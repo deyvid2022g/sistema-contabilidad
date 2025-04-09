@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useData } from '../../context/DataContext';
+import { useData } from '../../context/MySQLDataContext';
 import Button from '../../components/UI/Button';
 import { Transaction } from '../../types';
 
@@ -14,18 +14,19 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   onClose,
   defaultType 
 }) => {
-  const { categories, addTransaction, updateTransaction } = useData();
+  const { categories, accounts, addTransaction, updateTransaction } = useData();
   const [formData, setFormData] = useState({
     description: transaction?.description || '',
     amount: transaction?.amount || 0,
-    date: transaction?.date || new Date().toISOString().split('T')[0],
+    date: transaction?.date ? new Date(transaction.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
     category: transaction?.category || '',
+    accountId: transaction?.accountId || '',
     type: transaction?.type || defaultType || 'expense',
     reference: transaction?.reference || '',
     paymentMethod: transaction?.paymentMethod || 'cash',
     ivaAmount: transaction?.ivaAmount || 0,
-    ivaRate: transaction?.ivaRate || 19, // Default IVA rate in Colombia
-    taxCategory: transaction?.taxCategory || 'standard' // Default tax category
+    ivaRate: transaction?.ivaRate || 19,
+    taxCategory: transaction?.taxCategory || 'standard'
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -34,14 +35,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
     const transactionData = {
       description: formData.description,
       amount: Number(formData.amount),
-      date: formData.date,
-      category: formData.category,
+      date: new Date(formData.date),
+      accountId: formData.accountId,
+      categoryId: formData.category,
       type: formData.type as 'income' | 'expense',
       reference: formData.reference,
       paymentMethod: formData.paymentMethod,
       ivaAmount: Number(formData.ivaAmount),
       ivaRate: Number(formData.ivaRate),
-      taxCategory: formData.taxCategory,
+      taxCategory: formData.taxCategory as 'standard' | 'exempt' | 'reduced',
       createdBy: 'system'
     };
 
@@ -55,10 +57,10 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
   };
 
   const calculateIVA = () => {
-    const amount = Number(formData.amount);
-    const ivaRate = Number(formData.ivaRate);
+    const amount = Number(formData.amount) || 0;
+    const ivaRate = Number(formData.ivaRate) || 0;
     const ivaAmount = (amount * ivaRate) / 100;
-    setFormData(prev => ({ ...prev, ivaAmount: ivaAmount }));
+    setFormData(prev => ({ ...prev, ivaAmount: Number(ivaAmount.toFixed(2)) }));
   };
 
   return (
@@ -91,7 +93,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             value={formData.amount}
             onChange={(e) => {
-              setFormData(prev => ({ ...prev, amount: parseFloat(e.target.value) }));
+              const value = e.target.value === '' ? 0 : parseFloat(e.target.value);
+              setFormData(prev => ({ ...prev, amount: value }));
               calculateIVA();
             }}
           />
@@ -179,6 +182,28 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
         </div>
 
         <div>
+          <label htmlFor="account" className="block text-sm font-medium text-gray-700 mb-1">
+            Cuenta
+          </label>
+          <select
+            id="account"
+            required
+            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            value={formData.accountId}
+            onChange={(e) => setFormData(prev => ({ ...prev, accountId: e.target.value }))}
+          >
+            <option value="">Seleccionar cuenta</option>
+            {accounts
+              .filter(account => account.isActive)
+              .map(account => (
+                <option key={account.id} value={account.id}>
+                  {account.name} ({account.type})
+                </option>
+              ))}
+          </select>
+        </div>
+
+        <div>
           <label htmlFor="ivaRate" className="block text-sm font-medium text-gray-700 mb-1">
             Tasa de IVA (%)
           </label>
@@ -192,7 +217,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({
             className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             value={formData.ivaRate}
             onChange={(e) => {
-              setFormData(prev => ({ ...prev, ivaRate: parseFloat(e.target.value) }));
+              const value = e.target.value === '' ? 0 : parseFloat(e.target.value);
+              setFormData(prev => ({ ...prev, ivaRate: value }));
               calculateIVA();
             }}
           />

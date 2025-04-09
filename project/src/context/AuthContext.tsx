@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
+// Temporarily disable Firebase until proper credentials are set up
+// import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 
 interface AuthContextType {
   user: User | null;

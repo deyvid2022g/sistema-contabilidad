@@ -8,11 +8,12 @@ export interface User {
 
 export interface Transaction {
   id: string;
-  date: string;
+  date: Date;
   description: string;
   amount: number;
   type: 'income' | 'expense';
   category: string;
+  accountId: string;
   paymentMethod: string;
   reference?: string;
   notes?: string;

@@ -13,7 +13,7 @@ import {
   BarChart
 } from 'lucide-react';
 import Card from '../components/UI/Card';
-import { useData } from '../context/DataContext';
+import { useData } from '../context/MySQLDataContext';
 import { format } from 'date-fns';
 import {
   Chart as ChartJS,

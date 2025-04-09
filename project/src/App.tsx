@@ -2,7 +2,7 @@ import React from 'react';
 import { ChatProvider } from './context/ChatContext';
 import { createBrowserRouter, RouterProvider, Navigate, useRouteError } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
-import { DataProvider } from './context/DataContext';
+import { DataProvider } from './context/MySQLDataContext';
 import { NotificationProvider } from './context/NotificationContext';
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -69,29 +69,35 @@ const router = createBrowserRouter(
     {
       path: '/login',
       element: (
-        <AuthProvider>
-          <DataProvider>
-            <NotificationProvider>
-              <Login />
-            </NotificationProvider>
-          </DataProvider>
-        </AuthProvider>
+        <React.Suspense fallback={<div className="flex items-center justify-center min-h-screen">Cargando...</div>}>
+          <AuthProvider>
+            <DataProvider>
+              <NotificationProvider>
+                <Login />
+              </NotificationProvider>
+            </DataProvider>
+          </AuthProvider>
+        </React.Suspense>
       ),
-      errorElement: <ErrorBoundary />
+      errorElement: <ErrorBoundary />,
+      shouldRevalidate: () => false
     },
     {
       element: (
-        <AuthProvider>
-          <DataProvider>
-            <NotificationProvider>
-              <ChatProvider>
-                <ProtectedRoute />
-              </ChatProvider>
-            </NotificationProvider>
-          </DataProvider>
-        </AuthProvider>
+        <React.Suspense fallback={<div className="flex items-center justify-center min-h-screen">Cargando...</div>}>
+          <AuthProvider>
+            <DataProvider>
+              <NotificationProvider>
+                <ChatProvider>
+                  <ProtectedRoute />
+                </ChatProvider>
+              </NotificationProvider>
+            </DataProvider>
+          </AuthProvider>
+        </React.Suspense>
       ),
       errorElement: <ErrorBoundary />,
+      shouldRevalidate: () => false,
       children: [
         {
           path: '/',
@@ -157,7 +163,14 @@ const router = createBrowserRouter(
         }
       ]
     }
-  ]
+  ],
+  {
+    future: {
+      v7_relativeSplatPath: true
+    },
+    basename: '/',
+    hydrationData: (window as any).__INITIAL_DATA__
+  }
 );
 
 const App: React.FC = () => {
